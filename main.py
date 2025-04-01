@@ -12,6 +12,8 @@ from io import BytesIO
 import requests
 import threading
 
+
+
 class QuestDiagnosticsTool:
     def __init__(self, root):
         self.root = root
@@ -19,20 +21,24 @@ class QuestDiagnosticsTool:
         self.root.geometry("800x600")
         self.root.minsize(800, 600)
         root.iconbitmap("assets/rainbowoculus.ico")
+        root.configure(bg="#1e1e1e")
+        
         
         quest_2_image = PhotoImage(file="assets/OculusQuest2.png")
         unknown_image = PhotoImage(file="assets/images.png")
-        quest_1_image = PhotoImage(file="assets/images.png")
+        quest_1_image = PhotoImage(file="assets/OculusQuest1.png")
+        quest_3_image = PhotoImage(file="assets/MetaQuest3.png")
+        quest_3s_image = PhotoImage(file="assets/MetaQuest3S.png")
 
-        self.bg_color = "#f0f0f0"
+        self.bg_color = "#D3D3D3"
         self.header_color = "#2a2a2a"
         self.accent_color = "#5d6bc2"
         self.exploit_color = "#d93025"
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
         self.file_path = os.path.join(self.current_dir, "assets/keyboard.py")
         self.placeholder_images = {
-        "Quest 3S": quest_1_image,
-        "Quest 3": quest_1_image,
+        "Quest 3S": quest_3s_image,
+        "Quest 3": quest_3_image,
         "Quest 2": quest_2_image,
         "Quest 1": quest_1_image,
         "Unknown": unknown_image,
@@ -56,6 +62,9 @@ class QuestDiagnosticsTool:
 
         if "Unknown" not in self.placeholder_images:
                 self.placeholder_images["Unknown"] = ImageTk.PhotoImage(Image.new('RGB', (100, 100), color='grey'))
+
+        
+
         
         self.main_frame = tk.Frame(self.root, bg=self.bg_color)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -121,10 +130,10 @@ class QuestDiagnosticsTool:
         self.basic_button_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         basic_buttons = [
-            ("Refresh Device", self.refresh_device),
+            ("Refresh ADB", self.refresh_device),
             ("Restart Device", lambda: self.run_adb_command("reboot")),
             ("Shutdown", lambda: self.run_adb_command("shell reboot -p")),
-            ("Disconnect Controllers", self.disconnect_controllers),
+            ("Sideload APK", self.sideload_apk),
             ("Clear Cache", lambda: self.run_adb_command("shell pm clear com.oculus.vrshell")),
             ("Enter Recovery", lambda: self.run_adb_command("reboot recovery")),
             ("List Installed Apps", self.list_installed_apps),
@@ -152,11 +161,12 @@ class QuestDiagnosticsTool:
         
         exploit_buttons = [
             ("Factory Reset", self.factory_reset),
-            ("Auth Exploit (not working)", self.authexploit),
+            ("Auth Exploit (W) (v72)", self.authexploit),
             ("Disable Guardian", self.disable_guardian),
             ("Enable Guardian", self.enable_guardian),
             ("Enable Developer Options", lambda: self.run_adb_command("shell setprop debug.oculus.enableDeveloperOptions 1")),
             ("Open ADB Keyboard", self.showadbkeyboard),
+            
         ]
         
         row, col = 0, 0
@@ -339,11 +349,34 @@ class QuestDiagnosticsTool:
         self.root.after(0, lambda: self.update_text_widget(self.additional_info_text, "Connect a Quest device to see additional information"))
         
         self.root.after(0, lambda: self.set_status("No Quest device detected"))
-    
+
+    def sideload_apk(self):
+            try:
+                apk_path = filedialog.askopenfilename(
+                    title="Select APK to Sideload",
+                    filetypes=[("APK files", "*.apk"), ("All files", "*.*")]
+                )
+                
+                if not apk_path:
+                    print("No APK file selected. Cancelling operation.")
+                    return
+                
+                print(f"Starting sideload process for {apk_path}...")
+                print(f"Installing APK from {apk_path}...")
+
+                subprocess.run(["adb", "install", apk_path], check=True)
+
+                print("Sideload completed successfully")
+            except subprocess.CalledProcessError as e:
+                print(f"Error during sideload: {e}")
+
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+
+
     def update_ui_with_device(self):
         """Update UI with device information."""
         quest_version = self.device_info.get("quest_version", "Unknown").strip()
-
         print(f"Detected Quest version: {quest_version}")
     
         if quest_version == "Unknown":
@@ -366,7 +399,8 @@ class QuestDiagnosticsTool:
             f"Build: {self.device_info.get('build', 'N/A')}\n"
             f"Model: {self.device_info.get('model', 'N/A')}\n"
             f"Battery: {self.device_info.get('battery', 'N/A')}\n"
-            f"Charging: {self.device_info.get('charging', 'N/A')}"
+            f"Charging: {self.device_info.get('charging', 'N/A')}\n"
+            
         )
         self.update_text_widget(self.system_info_text, system_info)
 
@@ -382,7 +416,19 @@ class QuestDiagnosticsTool:
         self.update_text_widget(self.additional_info_text, additional_info)
 
         self.set_status(f"Connected to {quest_version} device")
-
+        
+    def get_memory_info(self):
+        try:
+            result = subprocess.run(["adb", "shell", "cat", "/proc/meminfo"], capture_output=True, text=True)
+            output = result.stdout
+            lines = output.splitlines()
+            mem_total = int(lines[0].split()[1]) / (1024 * 1024) 
+            mem_free = int(lines[1].split()[1]) / (1024 * 1024)
+            mem_available = int(lines[2].split()[1]) / (1024 * 1024)
+            return mem_total, mem_free, mem_available
+        except Exception as e:
+            print(f"Error: {e}")
+            return None
 
     
     def update_text_widget(self, widget, text):
@@ -594,7 +640,54 @@ class QuestDiagnosticsTool:
         else:
             self.set_status("Failed to enable Guardian system")
     
-    
+    def authexploitnew(self):
+        try:
+            apk_path = input("Enter the path to the APK file: ").strip()
+            package_name = input("Enter the package name to uninstall: ").strip()
+            
+            if not os.path.exists(apk_path):
+                print(f"Error: APK file not found at {apk_path}")
+                return
+            
+            if not package_name:
+                print("Error: Package name cannot be empty")
+                return
+            
+            print(f"Starting auth process for {package_name}...")
+            
+            subprocess.run(["adb", "shell", "input", "keyevent", "KEYCODE_WAKEUP"], check=True)
+            print("Headset awakened")
+            
+            subprocess.run(["adb", "shell", "am", "broadcast", "-a", "com.oculus.vrpowermanager.prox_close"], check=True)
+            print("Proximity sensor disabled")
+            
+            try:
+                print(f"Opening {package_name}...")
+                subprocess.run(["adb", "shell", "monkey", "-p", package_name, "1"], check=True)
+                
+                time.sleep(10)
+                
+                print(f"Uninstalling {package_name}...")
+                subprocess.run(["adb", "shell", "pm", "uninstall", package_name], check=True)
+                
+                print(f"Installing new APK from {apk_path}...")
+                subprocess.run(["adb", "install", apk_path], check=True)
+                
+                print("Process completed successfully!")
+                
+            except subprocess.CalledProcessError as e:
+                print(f"Error during process: {e}")
+            finally:
+                subprocess.run(["adb", "shell", "am", "broadcast", "-a", "com.oculus.vrpowermanager.automation_disable"], check=True)
+                print("Proximity sensor re-enabled")
+                
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            try:
+                subprocess.run(["adb", "shell", "am", "broadcast", "-a", "com.oculus.vrpowermanager.automation_disable"], check=True)
+                print("Proximity sensor re-enabled")
+            except:
+                print("Failed to re-enable proximity sensor")
 
     
     def remove_lock_pattern(self):
@@ -638,3 +731,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
