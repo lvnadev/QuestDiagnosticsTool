@@ -539,8 +539,12 @@ class QuestDiagnosticsTool:
                 self.run_adb_command("shell am broadcast -a android.intent.action.MASTER_CLEAR")
                 messagebox.showinfo("Factory Reset", "Factory reset command sent to device.")
     
+    
+
+
     def authexploit(self):
         """Automates opening, uninstalling, and sideloading an APK on Quest 2"""
+
         if not self.current_device:
             messagebox.showinfo("No Device", "No Quest device connected")
             return
@@ -556,33 +560,38 @@ class QuestDiagnosticsTool:
             return
 
         self.set_status("Waking up headset and disabling proximity sensor...")
-
         self.run_adb_command("shell input keyevent KEYCODE_WAKEUP")
-
-        self.run_adb_command("shell setprop debug.oculus.disable_proximity true")
+        time.sleep(2)
+        self.run_adb_command("shell am broadcast -a com.oculus.vrpowermanager.prox_close")
 
         self.set_status(f"Checking if {package_name} is installed...")
-
         package_list = subprocess.run(["adb", "shell", "pm", "list", "packages"], capture_output=True, text=True).stdout
-
         print("ADB Package List Output:", package_list)
 
         if not package_list or not isinstance(package_list, str) or "package:" not in package_list:
             messagebox.showerror("Error", "Failed to retrieve package list from device. Please check ADB connection.")
-            self.run_adb_command("shell setprop debug.oculus.disable_proximity false")
+            self.run_adb_command("shell am broadcast -a com.oculus.vrpowermanager.automation_disable")
             return
+
         installed_packages = [pkg.replace("package:", "").strip() for pkg in package_list.splitlines()]
-        
         print("Processed Package List:", installed_packages)
 
         if package_name not in installed_packages:
             messagebox.showerror("Package Not Found", f"The package '{package_name}' is not installed on the device.")
-            self.run_adb_command("shell setprop debug.oculus.disable_proximity false")
+            self.run_adb_command("shell am broadcast -a com.oculus.vrpowermanager.automation_disable")
             return
 
-        self.set_status(f"Opening {package_name} for 10 seconds...")
-        self.run_adb_command(f"shell monkey -p {package_name} -c android.intent.category.LAUNCHER 1")
-
+        # works better than adb
+        self.set_status(f"Prompting user to open {package_name} manually...")
+        response = messagebox.askokcancel(
+            "Open App Manually", 
+            f"Please open the app '{package_name}' on your device manually. Click OK once you have opened the app."
+        )
+        if not response:
+            messagebox.showinfo("Operation Cancelled", "Operation cancelled by user.")
+            return
+        
+        self.set_status(f"Waiting 10 seconds for {package_name} to run...")
         time.sleep(10)
 
         self.set_status(f"Closing {package_name}...")
@@ -591,19 +600,23 @@ class QuestDiagnosticsTool:
         self.set_status(f"Uninstalling {package_name}...")
         if not self.run_adb_command(f"uninstall {package_name}"):
             messagebox.showerror("Uninstall Failed", f"Failed to uninstall {package_name}.")
-            self.run_adb_command("shell setprop debug.oculus.disable_proximity false")
+            self.run_adb_command("shell am broadcast -a com.oculus.vrpowermanager.automation_disable")
             return
 
-        self.set_status(f"Sideloading modded APK...")
-        if not self.run_adb_command(f"install \"{apk_path}\""):
+        print(f"apk path is {apk_path}")
+        cmd = f"adb install \"{apk_path}\""
+
+        try:
+            subprocess.run(f"start cmd /K adb install \"{apk_path}\"", check=True, shell=True)
+        except subprocess.CalledProcessError:
             messagebox.showerror("Install Failed", "Failed to sideload the modded APK.")
-            self.run_adb_command("shell setprop debug.oculus.disable_proximity false")
+            self.run_adb_command("shell am broadcast -a com.oculus.vrpowermanager.automation_disable")
             return
-        self.run_adb_command("shell setprop debug.oculus.disable_proximity false")
+
+        self.run_adb_command("shell am broadcast -a com.oculus.vrpowermanager.automation_disable")
 
         messagebox.showinfo("Success", f"Modded APK installed successfully for {package_name}.")
         self.set_status("Operation complete")
-
 
 
 
